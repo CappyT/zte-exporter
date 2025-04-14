@@ -391,4 +391,4 @@ if __name__ == '__main__':
     # Collect and update the data every 10 seconds
     while True:
         collect_data()
-        time.sleep(SCRAPE_INTERVAL)
+        time.sleep(int(SCRAPE_INTERVAL))
