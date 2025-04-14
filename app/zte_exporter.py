@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 from prometheus_client import start_http_server, Gauge, Enum
+import ssl
 import requests
 import json
 import hashlib
 import time
 import os
+from http_adapter import CustomHttpAdapter
 
 class LoginFailedError(Exception):
     pass
@@ -208,7 +210,12 @@ dev_metrics = Gauge(
     ],
 )
 
+ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+ctx.options |= 0x4
+ctx.check_hostname = False
 session = requests.Session()
+session.verify = False
+session.mount('https://', CustomHttpAdapter(ctx))
 
 def sha256_encode(string):
     sha256_hash = hashlib.sha256(string.encode()).hexdigest().upper()
