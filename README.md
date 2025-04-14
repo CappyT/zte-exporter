@@ -1,3 +1,9 @@
+## Credits
+This work was originally made available by Robert Zaage
+https://zaage.it/projects/prometheus-exporter-for-zte-mc801a-hyperbox-5g/
+https://git.zaage.it/robert/ZTE-MC801A-Prometeus-Exporter
+
+
 # ZTE MC801A HyperBox 5G Prometeus Exporter
 
 The exporter will periodically fetch data from the ZTE MC801A HyperBox 5G router, convert it into Prometheus metrics, and make them available for scraping via an HTTP server on port `8000`.
