@@ -18,6 +18,7 @@ class EndpointDataFetchError(Exception):
 # Device Credentials
 ZTE_HOSTNAME = os.environ.get('ZTE_HOSTNAME', 'http://192.168.0.1')
 ZTE_PASSWORD = os.environ.get('ZTE_PASSWORD')
+SCRAPE_INTERVAL = os.environ.get('SCRAPE_INTERVAL', '30')
 
 metrics = {
     'puknumber': Gauge('puknumber', 'PUK number'),
@@ -388,4 +389,4 @@ if __name__ == '__main__':
     # Collect and update the data every 10 seconds
     while True:
         collect_data()
-        time.sleep(10)
+        time.sleep(SCRAPE_INTERVAL)
