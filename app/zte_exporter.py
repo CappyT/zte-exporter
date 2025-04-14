@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from prometheus_client import start_http_server, Gauge, Enum
+import urllib3
 import ssl
 import requests
 import json
@@ -217,6 +218,7 @@ ctx.check_hostname = False
 session = requests.Session()
 session.verify = False
 session.mount('https://', CustomHttpAdapter(ctx))
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def sha256_encode(string):
     sha256_hash = hashlib.sha256(string.encode()).hexdigest().upper()
