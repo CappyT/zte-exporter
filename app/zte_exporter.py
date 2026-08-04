@@ -294,17 +294,22 @@ def set_labeled_metric(gauge, label_names, data):
     gauge.clear()
     gauge.labels(**{name: str(data.get(name, '')) for name in label_names}).set(0)
 
+def is_authenticated(data):
+    # loginfo is "ok" only with a valid session; modem_main_state, signalbar
+    # and other login-page fields are readable WITHOUT auth and cannot be
+    # used as the sentinel (they would leave session-gated fields empty)
+    return data.get('loginfo') == 'ok'
+
 def collect_data():
     try:
         data = get_data_from_endpoints()
-        # modem_main_state comes back empty when the session is not (or no
-        # longer) authenticated: login only then, because the modem allows a
+        # login only when the session is missing/expired: the modem allows a
         # single web session and logging in on every cycle kicks out the web ui
-        if not data.get('modem_main_state'):
+        if not is_authenticated(data):
             login(ZTE_PASSWORD)
             data = get_data_from_endpoints()
 
-        if not data.get('modem_main_state'):
+        if not is_authenticated(data):
             print("No authenticated data from the modem this cycle.")
             zte_up.set(0)
             return
