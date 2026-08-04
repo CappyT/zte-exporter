@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
-from prometheus_client import start_http_server, Gauge, Enum
+from prometheus_client import start_http_server, Gauge, Counter
 import urllib3
 import ssl
 import requests
-import json
 import hashlib
 import time
 import os
@@ -126,10 +125,7 @@ metrics = {
     'wifi_sta_connection': Gauge('wifi_sta_connection', 'WiFi STA connection'),
 }
 
-cell_metrics = Gauge(
-    "cell_metrics",
-    "Cellular Metrics",
-    [
+CELL_LABELS = [
         "modem_main_state",
         "imei",
         "network_type",
@@ -164,12 +160,8 @@ cell_metrics = Gauge(
         "wan_lte_ca",
         "lte_multi_ca_scell_info",
         "lte_pci",
-    ],
-)
-wifi_metrics = Gauge(
-    "wifi_metrics",
-    "WiFi Metrics",
-    [
+]
+WIFI_LABELS = [
         "wifi_onoff_state",
         "m_SSID2",
         "wifi_chip1_ssid1_wifi_coverage",
@@ -188,12 +180,8 @@ wifi_metrics = Gauge(
         "station_ip_addr",
         "wifi_dfs_status",
         "ap_station_mode",
-    ],
-)
-dev_metrics = Gauge(
-    "dev_metrics",
-    "Device Metrics",
-    [
+]
+DEV_LABELS = [
         "cr_version",
         "wa_version",
         "hardware_version",
@@ -209,8 +197,16 @@ dev_metrics = Gauge(
         "wan_connect_status",
         "upgrade_result",
         "Language",
-    ],
-)
+]
+
+cell_metrics = Gauge("cell_metrics", "Cellular Metrics", CELL_LABELS)
+wifi_metrics = Gauge("wifi_metrics", "WiFi Metrics", WIFI_LABELS)
+dev_metrics = Gauge("dev_metrics", "Device Metrics", DEV_LABELS)
+zte_up = Gauge('zte_up', 'Whether the last collection cycle got authenticated data from the modem (1) or not (0)')
+zte_endpoint_failures = Counter('zte_endpoint_failures_total', 'Endpoint fetches that failed during collection cycles')
+
+# (connect, read) timeout: without it a hung modem blocks the loop indefinitely
+REQUEST_TIMEOUT = (5, 15)
 
 ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
 ctx.options |= 0x4
@@ -231,7 +227,7 @@ def login(ZTE_PASSWORD):
    	'cmd': 'LD'
     }
 
-    response = session.get(f'{ZTE_HOSTNAME}/goform/goform_get_cmd_process', params=params, headers={'Referer': f'{ZTE_HOSTNAME}/'})
+    response = session.get(f'{ZTE_HOSTNAME}/goform/goform_get_cmd_process', params=params, headers={'Referer': f'{ZTE_HOSTNAME}/'}, timeout=REQUEST_TIMEOUT)
     data = response.json()
     ld_token = data['LD']
     if not ld_token:
@@ -246,7 +242,7 @@ def login(ZTE_PASSWORD):
         'password': f"{password}"
     }
 
-    response = session.post(f'{ZTE_HOSTNAME}/goform/goform_set_cmd_process', headers={'Referer': f'{ZTE_HOSTNAME}/'}, data=login_data)
+    response = session.post(f'{ZTE_HOSTNAME}/goform/goform_set_cmd_process', headers={'Referer': f'{ZTE_HOSTNAME}/'}, data=login_data, timeout=REQUEST_TIMEOUT)
     result = response.json()['result']
 
     # Check the login result
@@ -257,7 +253,7 @@ def get_json_data(url, referer):
     headers = {
         'Referer': referer
     }
-    response = session.get(url, headers=headers)
+    response = session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     if response.status_code == 200:
         return response.json()
     else:
@@ -285,103 +281,55 @@ def get_data_from_endpoints():
             result = get_json_data(endpoint, f'{ZTE_HOSTNAME}/')
             if result:
                 data.update(result)
-        except EndpointDataFetchError as e:
+        except (EndpointDataFetchError, requests.RequestException, ValueError) as e:
             print(str(e))
+            zte_endpoint_failures.inc()
             continue
 
     return data
 
+def set_labeled_metric(gauge, label_names, data):
+    # clear() first: label values change over time (e.g. wan_ipaddr) and stale
+    # series would otherwise accumulate and linger forever
+    gauge.clear()
+    gauge.labels(**{name: str(data.get(name, '')) for name in label_names}).set(0)
+
 def collect_data():
     try:
-        login(ZTE_PASSWORD)
         data = get_data_from_endpoints()
+        # modem_main_state comes back empty when the session is not (or no
+        # longer) authenticated: login only then, because the modem allows a
+        # single web session and logging in on every cycle kicks out the web ui
+        if not data.get('modem_main_state'):
+            login(ZTE_PASSWORD)
+            data = get_data_from_endpoints()
 
-        cell_metrics.labels(
-            modem_main_state=data["modem_main_state"],
-            imei=data["imei"],
-            network_type=data["network_type"],
-            imsi=data["imsi"],
-            sim_imsi=data["sim_imsi"],
-            msisdn=data["msisdn"],
-            wan_ipaddr=data["wan_ipaddr"],
-            static_wan_ipaddr=data["static_wan_ipaddr"],
-            ipv6_wan_ipaddr=data["ipv6_wan_ipaddr"],
-            ipv6_pdp_type=data["ipv6_pdp_type"],
-            ipv6_pdp_type_ui=data["ipv6_pdp_type_ui"],
-            pdp_type=data["pdp_type"],
-            pdp_type_ui=data["pdp_type_ui"],
-            opms_wan_mode=data["opms_wan_mode"],
-            opms_wan_auto_mode=data["opms_wan_auto_mode"],
-            ppp_status=data["ppp_status"],
-            wan_active_band=data["wan_active_band"],
-            imei_sv=data["imei_sv"],
-            multi_pdns_wan_ipaddr_2=data["multi_pdns_wan_ipaddr_2"],
-            multi_pdns_ipv6_wan_ipaddr_2=data["multi_pdns_ipv6_wan_ipaddr_2"],
-            network_provider=data["network_provider"],
-            simcard_roam=data["simcard_roam"],
-            spn_name_data=data["spn_name_data"],
-            pppoe_status=data["pppoe_status"],
-            sta_ip_status=data["sta_ip_status"],
-            roam_setting_option=data["roam_setting_option"],
-            dial_mode=data["dial_mode"],
-            cell_id=data["cell_id"],
-            nr5g_pci=data["nr5g_pci"],
-            nr5g_action_band=data["nr5g_action_band"],
-            nr5g_cell_id=data["nr5g_cell_id"],
-            wan_lte_ca=data["wan_lte_ca"],
-            lte_multi_ca_scell_info=data["lte_multi_ca_scell_info"],
-            lte_pci=data["lte_pci"],
-        ).set(0)
-        wifi_metrics.labels(
-            wifi_onoff_state=data["wifi_onoff_state"],
-            m_SSID2=data["m_SSID2"],
-            wifi_chip1_ssid1_wifi_coverage=data["wifi_chip1_ssid1_wifi_coverage"],
-            m_ssid_enable=data["m_ssid_enable"],
-            wifi_chip1_ssid1_ssid=data["wifi_chip1_ssid1_ssid"],
-            wifi_chip1_ssid1_auth_mode=data["wifi_chip1_ssid1_auth_mode"],
-            wifi_chip1_ssid1_password_encode=data["wifi_chip1_ssid1_password_encode"],
-            wifi_chip2_ssid1_ssid=data["wifi_chip2_ssid1_ssid"],
-            wifi_chip2_ssid1_auth_mode=data["wifi_chip2_ssid1_auth_mode"],
-            wifi_chip2_ssid1_password_encode=data["wifi_chip2_ssid1_password_encode"],
-            lan_ipaddr=data["lan_ipaddr"],
-            wlan_mac_address=data["wlan_mac_address"],
-            LocalDomain=data["LocalDomain"],
-            wifi_chip1_ssid2_ssid=data["wifi_chip1_ssid2_ssid"],
-            wifi_chip2_ssid2_ssid=data["wifi_chip2_ssid2_ssid"],
-            station_ip_addr=data["station_ip_addr"],
-            wifi_dfs_status=data["wifi_dfs_status"],
-            ap_station_mode=data["ap_station_mode"],
-        ).set(0)
-        dev_metrics.labels(
-            cr_version=data["cr_version"],
-            wa_version=data["wa_version"],
-            hardware_version=data["hardware_version"],
-            web_version=data["web_version"],
-            wa_inner_version=data["wa_inner_version"],
-            build_version_time=data["build_version_time"],
-            loginfo=data["loginfo"],
-            new_version_state=data["new_version_state"],
-            current_upgrade_state=data["current_upgrade_state"],
-            is_mandatory=data["is_mandatory"],
-            check_web_conflict=data["check_web_conflict"],
-            vpn_conn_status=data["vpn_conn_status"],
-            wan_connect_status=data["wan_connect_status"],
-            upgrade_result=data["upgrade_result"],
-            Language=data["Language"],
-        ).set(0)
+        if not data.get('modem_main_state'):
+            print("No authenticated data from the modem this cycle.")
+            zte_up.set(0)
+            return
 
+        set_labeled_metric(cell_metrics, CELL_LABELS, data)
+        set_labeled_metric(wifi_metrics, WIFI_LABELS, data)
+        set_labeled_metric(dev_metrics, DEV_LABELS, data)
+
+        # one bad field must not stop the others
         for metric_name, metric in metrics.items():
             metric_value = data.get(metric_name)
+            if metric_value in (None, ''):
+                continue
             try:
-                if metric_value:
-                    metric.set(metric_value)
-            except Exception as e:
+                metric.set(metric_value)
+            except (ValueError, TypeError):
                 print(f'{metric_name} has wrong format: {metric_value}')
-                print(json.dumps(data, indent=4))
+
+        zte_up.set(1)
     except LoginFailedError as e:
         print(str(e))
+        zte_up.set(0)
     except Exception as e:
         print(f"An error occurred: {str(e)}")
+        zte_up.set(0)
 if __name__ == '__main__':
     # Start the Prometheus HTTP server
     start_http_server(8000)
