@@ -1,0 +1,65 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "timezone": "Europe/Rome",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "keep every container base image pinned to a digest",
+      "matchCategories": [
+        "docker"
+      ],
+      "pinDigests": true
+    },
+    {
+      "description": "automerge everything but majors, the pull request build is the gate",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "automerge": true
+    },
+    {
+      "description": "group the dockerfile base images into one pull request",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "groupName": "base images"
+    },
+    {
+      "description": "group the workflow actions into one pull request",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "let obviously broken releases get yanked before we take them",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "minimumReleaseAge": "3 days"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security"
+    ],
+    "schedule": []
+  }
+}
