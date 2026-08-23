@@ -1,0 +1,5 @@
+# Only the application source belongs in the build context
+*
+!app
+**/__pycache__
+**/*.py[cod]
