@@ -1,4 +1,4 @@
-FROM debian:12-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS build
+FROM debian:13-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad AS build
 RUN apt-get update && \
     apt-get install --no-install-suggests --no-install-recommends --yes python3-venv gcc libpython3-dev && \
     python3 -m venv /venv && \
@@ -12,7 +12,7 @@ RUN /venv/bin/pip install --disable-pip-version-check -r /requirements.txt
 # Copy the virtualenv into a distroless image.
 # distroless publishes no versioned tags, so :latest is pinned by digest and
 # renovate rolls the digest forward.
-FROM gcr.io/distroless/python3-debian12:latest@sha256:2fdb05402a2cf21cf78fdb3ba4c5db167241e9e498140f5bf689d7efb773731f
+FROM gcr.io/distroless/python3-debian13:latest@sha256:96234eaf03bba491856ead9142eccdda8cf9d09ce418770a260b84f529d81848
 COPY --from=build-venv /venv /venv
 COPY ./app /app
 WORKDIR /app
