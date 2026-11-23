@@ -12,7 +12,7 @@ RUN /venv/bin/pip install --disable-pip-version-check -r /requirements.txt
 # Copy the virtualenv into a distroless image.
 # distroless publishes no versioned tags, so :latest is pinned by digest and
 # renovate rolls the digest forward.
-FROM gcr.io/distroless/python3-debian13:latest@sha256:60faad2efce94a847f32e2adbcaefeb2e4fd3e3a78075a3abb600904a5e010e9
+FROM gcr.io/distroless/python3-debian13:latest@sha256:3f3fd24c6e8aa74559a8e84110a9b2916ae6e5ac6f482eea38d8bdac074fa03b
 COPY --from=build-venv /venv /venv
 COPY ./app /app
 WORKDIR /app
